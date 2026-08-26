@@ -111,3 +111,81 @@ describe('company validation', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
+
+const FIELDS_GET = {
+  id: { string: 'ID', type: 'integer' },
+  name: { string: 'Name', type: 'char' },
+  image_1920: { string: 'Image', type: 'binary' },
+  signature: { string: 'Signature', type: 'binary' },
+  state: {
+    string: 'Status',
+    type: 'selection',
+    selection: [
+      ['draft', 'Quotation'],
+      ['sale', 'Sales Order'],
+    ],
+  },
+}
+
+describe('describeModel', () => {
+  it('returns trimmed field metadata', async () => {
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, FIELDS_GET]))
+
+    const result = await client.describeModel('sale.order')
+
+    expect(result.meta.model).toBe('sale.order')
+    expect(Object.keys(result.data as object)).toEqual(['id', 'name', 'state'])
+    expect(result.data).toMatchObject({ name: { string: 'Name', type: 'char' } })
+  })
+
+  it('drops binary fields entirely', async () => {
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, FIELDS_GET]))
+
+    const result = await client.describeModel('sale.order')
+
+    expect(result.data).not.toHaveProperty('image_1920')
+    expect(result.data).not.toHaveProperty('signature')
+  })
+
+  it('rejects a model outside the allow list', async () => {
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7]))
+
+    await expect(client.describeModel('ir.attachment')).rejects.toMatchObject({
+      code: 'MODEL_NOT_ALLOWED',
+    })
+  })
+
+  it('calls fields_get only once per model', async () => {
+    const fetchMock = queueFetch([VERSION, 7, FIELDS_GET])
+    const client = new OdooClient(CONFIG, fetchMock)
+
+    await client.describeModel('sale.order')
+    await client.describeModel('sale.order')
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('truncates a long selection list', async () => {
+    const selection = Array.from({ length: 40 }, (_, index) => [`s${index}`, `S${index}`])
+    const client = new OdooClient(
+      CONFIG,
+      queueFetch([VERSION, 7, { state: { string: 'Status', type: 'selection', selection } }]),
+    )
+
+    const result = await client.describeModel('sale.order')
+
+    expect(result.meta.truncatedFields).toEqual(['state'])
+  })
+
+  it('caps the field count at two hundred', async () => {
+    const many = Object.fromEntries(
+      Array.from({ length: 250 }, (_, index) => [`f${index}`, { string: 'F', type: 'char' }]),
+    )
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, many]))
+
+    const result = await client.describeModel('sale.order')
+
+    expect(result.meta.truncated).toBe(true)
+    expect(result.meta.returned).toBe(200)
+  })
+})
