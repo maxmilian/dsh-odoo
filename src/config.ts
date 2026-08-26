@@ -119,7 +119,11 @@ function resolveCompanyId(
   configured: number | undefined,
   fromEnv: string | undefined,
 ): { companyId?: number } {
-  const raw = configured ?? (fromEnv?.trim() ? Number.parseInt(fromEnv.trim(), 10) : undefined)
+  const environmentValue = fromEnv?.trim()
+  if (configured === undefined && environmentValue && !/^[1-9]\d*$/.test(environmentValue)) {
+    throw configError('companyId must be a positive integer.')
+  }
+  const raw = configured ?? (environmentValue ? Number(environmentValue) : undefined)
   if (raw === undefined) return {}
   if (!Number.isSafeInteger(raw) || raw < 1 || raw > MAX_COMPANY_ID) {
     throw configError('companyId must be a positive integer.')

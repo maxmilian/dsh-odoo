@@ -70,6 +70,9 @@ describe('resolveConfig', () => {
     [{ companyId: 0 }, {}],
     [{ locale: 'de' as never }, {}],
     [{}, { ODOO_COMPANY_ID: 'abc' }],
+    [{}, { ODOO_COMPANY_ID: '12junk' }],
+    [{}, { ODOO_COMPANY_ID: '1.5' }],
+    [{}, { ODOO_COMPANY_ID: '+3' }],
   ])('rejects invalid config %#', (config, env) => {
     expect(() => resolveConfig(config, env)).toThrowError(OdooApiError)
   })

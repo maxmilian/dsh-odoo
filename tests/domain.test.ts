@@ -8,6 +8,7 @@ import {
   validatePagination,
 } from '../src/domain.js'
 import { OdooApiError } from '../src/errors.js'
+import { DEFAULT_FIELDS } from '../src/models.js'
 
 const FIELDS = new Set(['id', 'name', 'partner_id', 'state', 'amount_total'])
 const TYPES = new Map<string, string>([
@@ -17,6 +18,10 @@ const TYPES = new Map<string, string>([
   ['state', 'selection'],
   ['image_1920', 'binary'],
   ['signature', 'binary'],
+])
+const SALE_ORDER_TYPES = new Map<string, string>([
+  ...DEFAULT_FIELDS['sale.order'].map((field) => [field, 'char'] as const),
+  ...TYPES,
 ])
 
 describe('validateDomain', () => {
@@ -80,18 +85,20 @@ describe('validateDomain', () => {
   })
 
   it('never echoes the offending value', () => {
+    let error: unknown
     try {
       validateDomain([['name', 'ilike', 'super-secret-customer']], new Set(['id']))
-      throw new Error('expected a throw')
-    } catch (error) {
-      expect((error as Error).message).not.toContain('super-secret-customer')
+    } catch (caught) {
+      error = caught
     }
+    expect(error).toBeInstanceOf(OdooApiError)
+    expect((error as Error).message).not.toContain('super-secret-customer')
   })
 })
 
 describe('validateFields', () => {
   it('falls back to the model default field set', () => {
-    expect(validateFields(undefined, 'sale.order', TYPES)).toContain('id')
+    expect(validateFields(undefined, 'sale.order', SALE_ORDER_TYPES)).toContain('id')
   })
 
   it('rejects a field the model does not define', () => {
@@ -200,6 +207,19 @@ describe('validateCreateValues', () => {
     expect(() =>
       validateCreateValues('sale.order', { partner_id: 7, order_line: [[0, 0, {}]] }),
     ).toThrowError(/order_line/)
+  })
+
+  it.each([
+    '__proto__',
+    'constructor',
+    'toString',
+    'valueOf',
+    'hasOwnProperty',
+    '__defineGetter__',
+  ])('rejects inherited Object.prototype key %s', (key) => {
+    const values = JSON.parse(`{"partner_id":7,"${key}":[1]}`) as Record<string, unknown>
+
+    expect(() => validateCreateValues('sale.order', values)).toThrowError(/not allowed/)
   })
 
   it('rejects a missing required field', () => {

@@ -41,11 +41,17 @@ const OPERATORS: ReadonlySet<string> = new Set([
 interface ParseState {
   readonly domain: readonly unknown[]
   readonly knownFields: ReadonlySet<string>
+  readonly binaryFields: ReadonlySet<string>
   leaves: number
 }
 
 /** Rejects a field name that contains a dot or is unknown to the model. */
-function assertFieldName(field: unknown, knownFields: ReadonlySet<string>, where: string): string {
+function assertFieldName(
+  field: unknown,
+  knownFields: ReadonlySet<string>,
+  where: string,
+  binaryFields: ReadonlySet<string> = new Set(),
+): string {
   if (typeof field !== 'string') {
     throw inputError(`${where} must name a field.`)
   }
@@ -59,6 +65,9 @@ function assertFieldName(field: unknown, knownFields: ReadonlySet<string>, where
   }
   if (!knownFields.has(field)) {
     throw inputError(`${where} names a field that does not exist on this model: ${field}.`)
+  }
+  if (binaryFields.has(field)) {
+    throw inputError(`${where} names a binary field and cannot be used.`)
   }
   return field
 }
@@ -80,7 +89,7 @@ function assertLeaf(state: ParseState, node: unknown, index: number): void {
   if (!Array.isArray(node) || node.length !== 3) {
     throw inputError(`domain element at index ${index} must be a triple.`)
   }
-  assertFieldName(node[0], state.knownFields, `domain field at index ${index}`)
+  assertFieldName(node[0], state.knownFields, `domain field at index ${index}`, state.binaryFields)
   if (typeof node[1] !== 'string' || !OPERATORS.has(node[1])) {
     throw inputError(`domain operator at index ${index} is not supported.`)
   }
@@ -111,12 +120,16 @@ function parseNode(state: ParseState, index: number): number {
 }
 
 /** Validates an Odoo domain: structure, arity, field names, operators, and values. */
-export function validateDomain(domain: unknown, knownFields: ReadonlySet<string>): JsonValue[] {
+export function validateDomain(
+  domain: unknown,
+  knownFields: ReadonlySet<string>,
+  binaryFields: ReadonlySet<string> = new Set(),
+): JsonValue[] {
   if (!Array.isArray(domain)) throw inputError('domain must be an array.')
   if (domain.length > MAX_DOMAIN_LENGTH) {
     throw inputError(`domain must contain at most ${MAX_DOMAIN_LENGTH} elements.`)
   }
-  const state: ParseState = { domain, knownFields, leaves: 0 }
+  const state: ParseState = { domain, knownFields, binaryFields, leaves: 0 }
   let index = 0
   while (index < domain.length) index = parseNode(state, index)
   if (state.leaves > MAX_DOMAIN_LEAVES) {
@@ -149,18 +162,19 @@ export function validateFields(
   model: ReadModel,
   fieldTypes: ReadonlyMap<string, string>,
 ): readonly string[] {
-  if (fields === undefined) return DEFAULT_FIELDS[model]
-  if (fields.length < 1 || fields.length > MAX_FIELDS) {
+  const resolved = fields ?? DEFAULT_FIELDS[model]
+  if (resolved.length < 1 || resolved.length > MAX_FIELDS) {
     throw inputError(`fields must contain 1-${MAX_FIELDS} names.`)
   }
-  for (const field of fields) assertRequestableField(field, model, fieldTypes)
-  return fields
+  for (const field of resolved) assertRequestableField(field, model, fieldTypes)
+  return resolved
 }
 
 /** Validates an order clause of at most three terms. */
 export function validateOrder(
   order: string | undefined,
   knownFields: ReadonlySet<string>,
+  binaryFields: ReadonlySet<string> = new Set(),
 ): string | undefined {
   if (order === undefined) return undefined
   const terms = order.split(',').map((term) => term.trim())
@@ -169,7 +183,12 @@ export function validateOrder(
   }
   const normalized = terms.map((term, index) => {
     const parts = term.split(/\s+/).filter((part) => part.length > 0)
-    const field = assertFieldName(parts[0], knownFields, `order field at index ${index}`)
+    const field = assertFieldName(
+      parts[0],
+      knownFields,
+      `order field at index ${index}`,
+      binaryFields,
+    )
     if (parts.length === 1) return field
     if (parts.length > 2 || !DIRECTIONS.has((parts[1] ?? '').toLowerCase())) {
       throw inputError(`order direction at index ${index} must be asc or desc.`)
@@ -258,6 +277,17 @@ function assertNoForbiddenFields(model: WriteModel, source: Record<string, unkno
   }
 }
 
+function createRule(
+  rules: Readonly<Record<string, FieldRule>>,
+  key: string,
+  model: WriteModel,
+): FieldRule {
+  if (!Object.hasOwn(rules, key) || rules[key] === undefined) {
+    throw inputError(`values field ${key} is not allowed for ${model}.`)
+  }
+  return rules[key]
+}
+
 /** Validates draft creation values and applies the fixed draft policy. */
 export function validateCreateValues(model: WriteModel, values: unknown): JsonObject {
   if (typeof values !== 'object' || values === null || Array.isArray(values)) {
@@ -268,10 +298,7 @@ export function validateCreateValues(model: WriteModel, values: unknown): JsonOb
   assertNoForbiddenFields(model, source)
   const payload: JsonObject = {}
   for (const [key, value] of Object.entries(source)) {
-    const rule = rules[key]
-    if (rule === undefined) {
-      throw inputError(`values field ${key} is not allowed for ${model}.`)
-    }
+    const rule = createRule(rules, key, model)
     payload[key] = ruleValue(key, rule, value)
   }
   for (const [key, rule] of Object.entries(rules)) {
