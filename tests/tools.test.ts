@@ -16,8 +16,24 @@ const stubClient = () =>
 const byName = (tools: readonly ToolDefinition[], name: string) =>
   tools.find((tool) => tool.name === name)
 
+interface CompiledParameters {
+  readonly properties?: Record<string, unknown>
+  readonly required?: readonly string[]
+}
+
+const compiled = (tool: ToolDefinition | undefined) =>
+  (tool?.parameters ?? {}) as CompiledParameters
+
 const parameterOf = (tool: ToolDefinition | undefined, key: string) =>
-  (tool?.parameters as Record<string, unknown> | undefined)?.[key]
+  compiled(tool).properties?.[key]
+
+/** Minimal valid arguments per tool, so defineTool argument validation passes. */
+const VALID_ARGS: Readonly<Record<string, Record<string, unknown>>> = {
+  odoo_server_info: {},
+  odoo_describe_model: { model: 'sale.order' },
+  odoo_search_read: { model: 'sale.order' },
+  odoo_create_draft: { model: 'sale.order', values: { partner_id: 1 } },
+}
 
 describe('tool registration', () => {
   it('exposes three read-only tools when writing is disabled', () => {
@@ -39,7 +55,7 @@ describe('tool registration', () => {
 
   it('marks every tool concurrency safe', () => {
     for (const tool of createOdooTools(stubClient(), 'en', true)) {
-      expect(tool.isConcurrencySafe?.({} as never)).toBe(true)
+      expect(tool.isConcurrencySafe?.(VALID_ARGS[tool.name] as never), tool.name).toBe(true)
     }
   })
 
@@ -48,9 +64,9 @@ describe('tool registration', () => {
 
     expect(byName(tools, 'odoo_server_info')?.presentCall).toBeUndefined()
     expect(byName(tools, 'odoo_search_read')?.presentCall).toBeUndefined()
-    expect(byName(tools, 'odoo_create_draft')?.presentCall?.({} as never)).toMatchObject({
-      kind: 'edit',
-    })
+    expect(
+      byName(tools, 'odoo_create_draft')?.presentCall?.(VALID_ARGS.odoo_create_draft as never),
+    ).toMatchObject({ kind: 'edit' })
   })
 })
 
@@ -58,13 +74,15 @@ describe('tool parameters', () => {
   it('restricts the search model to the read allow list', () => {
     const tool = byName(createOdooTools(stubClient(), 'en', false), 'odoo_search_read')
 
-    expect(parameterOf(tool, 'model')).toMatchObject({ required: true, enum: [...READ_MODELS] })
+    expect(parameterOf(tool, 'model')).toMatchObject({ enum: [...READ_MODELS] })
+    expect(compiled(tool).required).toContain('model')
   })
 
   it('restricts the draft model to the write allow list', () => {
     const tool = byName(createOdooTools(stubClient(), 'en', true), 'odoo_create_draft')
 
-    expect(parameterOf(tool, 'model')).toMatchObject({ required: true, enum: [...WRITE_MODELS] })
+    expect(parameterOf(tool, 'model')).toMatchObject({ enum: [...WRITE_MODELS] })
+    expect(compiled(tool).required).toEqual(['model', 'values'])
   })
 
   it('keeps tool names in English across locales', () => {
@@ -100,7 +118,9 @@ describe('tool execution', () => {
 
   it('emits only meta keys from the output contract', async () => {
     const tool = byName(createOdooTools(stubClient(), 'en', false), 'odoo_search_read')
-    const result = (await tool?.execute?.({ model: 'sale.order' }, { signal: undefined } as never)) as {
+    const result = (await tool?.execute?.({ model: 'sale.order' }, {
+      signal: undefined,
+    } as never)) as {
       meta: Record<string, unknown>
     }
     const allowed = [

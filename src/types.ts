@@ -6,21 +6,15 @@ export type JsonValue = DshJsonValue
 /** A JSON object with string keys. */
 export type JsonObject = { [key: string]: JsonValue }
 
-/** Safe response metadata exposed by every Odoo client method. */
-export interface ApiMeta {
-  readonly model?: string
-  readonly total?: number
-  readonly returned?: number
-  readonly offset?: number
-  readonly truncatedFields?: readonly string[]
-  readonly truncated?: boolean
-  readonly odooVersion?: string
-}
-
-/** Canonical response returned by every Odoo client method. */
+/**
+ * Canonical response returned by every Odoo client method.
+ *
+ * `meta` carries only these keys, and only when the method produces them:
+ * `model`, `total`, `returned`, `offset`, `truncatedFields`, `truncated`, `odooVersion`.
+ */
 export interface ApiResult<T extends JsonValue = JsonValue> {
   readonly data: T
-  readonly meta: ApiMeta
+  readonly meta: JsonObject
 }
 
 /** Parameters accepted by the restricted search_read. */
