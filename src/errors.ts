@@ -194,9 +194,20 @@ function exceptionMessage(rpcError: unknown): unknown {
   return nested ?? (rpcError as { message?: unknown }).message
 }
 
+function isMissingDatabaseError(rpcError: unknown): boolean {
+  const message = exceptionMessage(rpcError)
+  return typeof message === 'string' && /\bdatabase\b.*\bdoes not exist\b/i.test(message)
+}
+
 /** Creates a safe error for a JSON-RPC level failure returned with HTTP 200. */
 export function createRpcError(rpcError: unknown, apiKey = ''): OdooApiError {
   const name = exceptionName(rpcError)
+  if (isMissingDatabaseError(rpcError)) {
+    return new OdooApiError('The configured Odoo database was not found.', {
+      code: 'INVALID_CONFIG',
+      ...(name === undefined ? {} : { odooException: name }),
+    })
+  }
   const code = (name === undefined ? undefined : EXCEPTION_CODES[name]) ?? 'ODOO_RPC_ERROR'
   const detail = DETAIL_CODES.has(code)
     ? sanitizeDetail(exceptionMessage(rpcError), apiKey)

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { OdooClient } from '../src/client.js'
 import { resolveConfig } from '../src/config.js'
+import { DEFAULT_FIELDS } from '../src/models.js'
 
 const CONFIG = resolveConfig({
   baseUrl: 'https://odoo.example.com',
@@ -130,6 +131,11 @@ const FIELDS_GET = {
   },
 }
 
+const SALE_ORDER_FIELDS_GET = {
+  ...Object.fromEntries(DEFAULT_FIELDS['sale.order'].map((field) => [field, { type: 'char' }])),
+  ...FIELDS_GET,
+}
+
 describe('describeModel', () => {
   it('returns trimmed field metadata', async () => {
     const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, FIELDS_GET]))
@@ -168,6 +174,15 @@ describe('describeModel', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
+  it('shares an in-flight fields_get across concurrent calls', async () => {
+    const fetchMock = queueFetch([VERSION, 7, FIELDS_GET, FIELDS_GET])
+    const client = new OdooClient(CONFIG, fetchMock)
+
+    await Promise.all([client.describeModel('sale.order'), client.describeModel('sale.order')])
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
   it('truncates a long selection list', async () => {
     const selection = Array.from({ length: 40 }, (_, index) => [`s${index}`, `S${index}`])
     const client = new OdooClient(
@@ -197,7 +212,7 @@ describe('searchRead', () => {
   const records = [{ id: 1, name: 'ACME', partner_id: [4, 'ACME Inc'] }]
 
   it('sends the model default fields when none are given', async () => {
-    const fetchMock = queueFetch([VERSION, 7, FIELDS_GET, 1, records])
+    const fetchMock = queueFetch([VERSION, 7, SALE_ORDER_FIELDS_GET, 1, records])
     const client = new OdooClient(CONFIG, fetchMock)
 
     await client.searchRead({ model: 'sale.order' })
@@ -207,12 +222,30 @@ describe('searchRead', () => {
     expect(body.params.args[6].fields).toContain('id')
   })
 
+  it('rejects a missing field from the model default field set', async () => {
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, { id: { type: 'integer' } }]))
+
+    await expect(client.searchRead({ model: 'sale.order' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    })
+  })
+
+  it('rejects a binary field from the model default field set', async () => {
+    const fields = { ...SALE_ORDER_FIELDS_GET, name: { type: 'binary' } }
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, fields]))
+
+    await expect(client.searchRead({ model: 'sale.order' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    })
+  })
+
   it('returns total, returned, and offset in meta', async () => {
     const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, FIELDS_GET, 137, records]))
 
     const result = await client.searchRead({ model: 'sale.order', fields: ['id', 'name'] })
 
     expect(result.meta).toMatchObject({ model: 'sale.order', total: 137, returned: 1, offset: 0 })
+    expect(Object.keys(result.meta).sort()).toEqual(['model', 'offset', 'returned', 'total'])
   })
 
   it('truncates long string values and reports the field', async () => {
@@ -264,6 +297,28 @@ describe('searchRead', () => {
     await expect(
       client.searchRead({ model: 'sale.order', domain: [['partner_id.name', '=', 'x']] }),
     ).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+  })
+
+  it.each([{ domain: [['signature', '=', false]] }, { order: 'signature asc' }])(
+    'rejects a binary field used outside the returned fields',
+    async (params) => {
+      const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, FIELDS_GET]))
+
+      await expect(
+        client.searchRead({ model: 'sale.order', fields: ['id'], ...params }),
+      ).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+    },
+  )
+
+  it.each([
+    ['search_count', 'not-a-count', []],
+    ['search_read', 3, { id: 1 }],
+  ])('rejects an invalid %s result', async (_method, total, rows) => {
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, FIELDS_GET, total, rows]))
+
+    await expect(client.searchRead({ model: 'sale.order', fields: ['id'] })).rejects.toMatchObject({
+      code: 'INVALID_RESPONSE',
+    })
   })
 
   it('passes allowed_company_ids in the context when configured', async () => {

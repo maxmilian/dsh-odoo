@@ -81,6 +81,18 @@ describe('JSON-RPC error mapping', () => {
   it('falls back to ODOO_RPC_ERROR when data.name is missing', () => {
     expect(createRpcError({ message: 'nope' }).code).toBe('ODOO_RPC_ERROR')
   })
+
+  it('maps a missing configured database to INVALID_CONFIG without exposing detail', () => {
+    const error = createRpcError(
+      rpc('psycopg2.OperationalError', 'database "missing-db" does not exist'),
+    )
+
+    expect(error).toMatchObject({
+      code: 'INVALID_CONFIG',
+      message: 'The configured Odoo database was not found.',
+      detail: undefined,
+    })
+  })
 })
 
 describe('sanitizeDetail', () => {

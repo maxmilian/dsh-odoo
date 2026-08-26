@@ -10,6 +10,7 @@ import {
 import { configError, OdooApiError } from './errors.js'
 import type { ReadModel } from './models.js'
 import {
+  BINARY_FIELDS,
   CREATE_READBACK_FIELDS,
   isReadModel,
   isWriteModel,
@@ -39,6 +40,7 @@ export class OdooClient {
   readonly #config: ResolvedOdooConfig
   readonly #transport: RpcTransport
   readonly #fieldsRaw = new Map<string, JsonObject>()
+  readonly #fieldsPending = new Map<string, Promise<JsonObject>>()
   readonly #fieldTypes = new Map<string, ReadonlyMap<string, string>>()
   #handshake: Promise<Handshake> | undefined
 
@@ -101,15 +103,19 @@ export class OdooClient {
     const model = params.model
     const types = await this.fieldTypesFor(model, signal)
     const known = new Set(types.keys())
-    const domain = validateDomain(params.domain ?? [], known)
+    const binary = binaryFieldNames(types)
+    const domain = validateDomain(params.domain ?? [], known, binary)
     const fields = validateFields(params.fields, model, types)
-    const order = validateOrder(params.order, known)
+    const order = validateOrder(params.order, known, binary)
     const { limit, offset } = validatePagination(
       params.limit,
       params.offset,
       this.config.defaultLimit,
     )
     const total = await this.execute(model, 'search_count', [domain], {}, signal)
+    if (!Number.isSafeInteger(total) || (total as number) < 0) {
+      throw invalidResponse('search_count', model)
+    }
     const rows = await this.execute(
       model,
       'search_read',
@@ -117,15 +123,16 @@ export class OdooClient {
       { fields: [...fields], limit, offset, ...(order === undefined ? {} : { order }) },
       signal,
     )
+    if (!Array.isArray(rows) || !rows.every(isJsonObject)) {
+      throw invalidResponse('search_read', model)
+    }
     const truncatedFields: string[] = []
-    const data = Array.isArray(rows)
-      ? rows.map((row) => trimRecord(row, truncatedFields))
-      : ([] as JsonValue[])
+    const data = rows.map((row) => trimRecord(row, truncatedFields))
     return {
       data: data as JsonValue,
       meta: {
         model,
-        total: typeof total === 'number' ? total : data.length,
+        total: total as number,
         returned: data.length,
         offset,
         ...(truncatedFields.length > 0 ? { truncatedFields } : {}),
@@ -179,6 +186,14 @@ export class OdooClient {
   protected async fieldsGet(model: ReadModel, signal?: AbortSignal): Promise<JsonObject> {
     const cached = this.#fieldsRaw.get(model)
     if (cached !== undefined) return cached
+    const pending = this.#fieldsPending.get(model)
+    if (pending !== undefined) return pending
+    const request = this.#loadFields(model, signal).finally(() => this.#fieldsPending.delete(model))
+    this.#fieldsPending.set(model, request)
+    return request
+  }
+
+  async #loadFields(model: ReadModel, signal?: AbortSignal): Promise<JsonObject> {
     const raw = await this.execute(
       model,
       'fields_get',
@@ -342,6 +357,21 @@ export function assertReadModel(model: string): asserts model is ReadModel {
 
 function fieldType(meta: unknown): string {
   return isJsonObject(meta) && typeof meta.type === 'string' ? meta.type : 'unknown'
+}
+
+function binaryFieldNames(fieldTypes: ReadonlyMap<string, string>): ReadonlySet<string> {
+  const names = new Set(BINARY_FIELDS)
+  for (const [name, type] of fieldTypes) {
+    if (type === 'binary') names.add(name)
+  }
+  return names
+}
+
+function invalidResponse(method: string, model: string): OdooApiError {
+  return new OdooApiError(`Odoo returned an unexpected ${method} result.`, {
+    code: 'INVALID_RESPONSE',
+    model,
+  })
 }
 
 const FIELD_ATTRIBUTES = [
