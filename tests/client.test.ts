@@ -284,3 +284,77 @@ describe('searchRead', () => {
     expect(body.params.args[6].context).toEqual({ allowed_company_ids: [2] })
   })
 })
+
+describe('createDraft', () => {
+  const WRITABLE = resolveConfig({ ...CONFIG, allowWrite: true })
+
+  it('creates a draft sale order and reads it back', async () => {
+    const fetchMock = queueFetch([VERSION, 7, 42, [{ id: 42, name: 'S0001', state: 'draft' }]])
+    const client = new OdooClient(WRITABLE, fetchMock)
+
+    const result = await client.createDraft({ model: 'sale.order', values: { partner_id: 3 } })
+
+    expect(result.data).toMatchObject({ id: 42, state: 'draft' })
+    expect(result.meta.model).toBe('sale.order')
+
+    const createBody = JSON.parse(String((fetchMock.mock.calls[2] as unknown as FetchCall)[1].body))
+    expect(createBody.params.args[4]).toBe('create')
+    expect(createBody.params.args[5][0]).toEqual({ partner_id: 3, state: 'draft' })
+  })
+
+  it('creates a project task without any state or stage', async () => {
+    const fetchMock = queueFetch([VERSION, 7, 9, [{ id: 9, name: 'Task', stage_id: [1, 'New'] }]])
+    const client = new OdooClient(WRITABLE, fetchMock)
+
+    await client.createDraft({ model: 'project.task', values: { name: 'Task', project_id: 5 } })
+
+    const createBody = JSON.parse(String((fetchMock.mock.calls[2] as unknown as FetchCall)[1].body))
+    expect(createBody.params.args[5][0]).toEqual({ name: 'Task', project_id: 5 })
+  })
+
+  it('rejects a model outside the write allow list', async () => {
+    const client = new OdooClient(WRITABLE, queueFetch([VERSION, 7]))
+
+    await expect(
+      client.createDraft({ model: 'res.partner', values: { name: 'x' } }),
+    ).rejects.toMatchObject({ code: 'MODEL_NOT_ALLOWED' })
+  })
+
+  it('refuses to write when allowWrite is false', async () => {
+    const fetchMock = vi.fn()
+    const client = new OdooClient(CONFIG, fetchMock)
+
+    await expect(
+      client.createDraft({ model: 'sale.order', values: { partner_id: 3 } }),
+    ).rejects.toMatchObject({ code: 'WRITE_DISABLED' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an Odoo UserError with its sanitized detail', async () => {
+    const client = new OdooClient(
+      WRITABLE,
+      vi
+        .fn()
+        .mockResolvedValueOnce(ok(VERSION))
+        .mockResolvedValueOnce(ok(7))
+        .mockResolvedValueOnce(
+          json({
+            jsonrpc: '2.0',
+            id: 3,
+            error: {
+              code: 200,
+              message: 'Odoo Server Error',
+              data: { name: 'odoo.exceptions.UserError', message: 'Please define a pricelist.' },
+            },
+          }),
+        ),
+    )
+
+    await expect(
+      client.createDraft({ model: 'sale.order', values: { partner_id: 3 } }),
+    ).rejects.toMatchObject({
+      code: 'ODOO_VALIDATION_ERROR',
+      detail: 'Please define a pricelist.',
+    })
+  })
+})

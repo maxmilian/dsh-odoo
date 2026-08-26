@@ -1,17 +1,31 @@
 import type { OdooConfig, ResolvedOdooConfig } from './config.js'
 import { assertCredentials, resolveConfig } from './config.js'
-import { validateDomain, validateFields, validateOrder, validatePagination } from './domain.js'
+import {
+  validateCreateValues,
+  validateDomain,
+  validateFields,
+  validateOrder,
+  validatePagination,
+} from './domain.js'
 import { configError, OdooApiError } from './errors.js'
 import type { ReadModel } from './models.js'
 import {
+  CREATE_READBACK_FIELDS,
   isReadModel,
+  isWriteModel,
   MAX_DESCRIBE_FIELDS,
   MAX_SELECTION_OPTIONS,
   MAX_STRING_CHARS,
 } from './models.js'
 import type { FetchImplementation } from './rpc.js'
 import { RpcTransport } from './rpc.js'
-import type { ApiResult, JsonObject, JsonValue, SearchReadParams } from './types.js'
+import type {
+  ApiResult,
+  CreateDraftParams,
+  JsonObject,
+  JsonValue,
+  SearchReadParams,
+} from './types.js'
 
 export { resolveConfig }
 
@@ -117,6 +131,48 @@ export class OdooClient {
         ...(truncatedFields.length > 0 ? { truncatedFields } : {}),
       },
     }
+  }
+
+  /** Creates one draft record on an allow-listed write model. */
+  async createDraft(
+    params: CreateDraftParams,
+    signal?: AbortSignal,
+  ): Promise<ApiResult<JsonObject>> {
+    if (!this.config.allowWrite) {
+      throw new OdooApiError('Draft creation is disabled. Set allowWrite to true to enable it.', {
+        code: 'WRITE_DISABLED',
+      })
+    }
+    if (!isWriteModel(params.model)) {
+      throw new OdooApiError('This model is not on the draft-create allow list.', {
+        code: 'MODEL_NOT_ALLOWED',
+        model: params.model,
+      })
+    }
+    const model = params.model
+    const values = validateCreateValues(model, params.values)
+    const id = await this.execute(model, 'create', [values], {}, signal)
+    if (!Number.isSafeInteger(id) || (id as number) < 1) {
+      throw new OdooApiError('Odoo returned an unexpected create result.', {
+        code: 'INVALID_RESPONSE',
+        model,
+      })
+    }
+    const rows = await this.execute(
+      model,
+      'read',
+      [[id as number], [...CREATE_READBACK_FIELDS[model]]],
+      {},
+      signal,
+    )
+    const record = Array.isArray(rows) ? rows[0] : undefined
+    if (!isJsonObject(record)) {
+      throw new OdooApiError('Odoo returned an unexpected read result.', {
+        code: 'INVALID_RESPONSE',
+        model,
+      })
+    }
+    return { data: record, meta: { model } }
   }
 
   /** Loads and caches the raw fields_get payload for one model. */
