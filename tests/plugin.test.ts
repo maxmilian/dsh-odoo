@@ -3,8 +3,6 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { apply, Config, inject, name } from '../src/index.js'
 
-const pluginIt = Object.hasOwn(globalThis, 'Bun') ? it.skip : it
-
 const CONFIG = {
   baseUrl: 'https://odoo.example.com',
   db: 'demo',
@@ -45,7 +43,7 @@ describe('DSH plugin entry', () => {
     expect(Config.dict?.defaultLimit?.meta).toMatchObject({ default: 20, min: 1, max: 100 })
   })
 
-  pluginIt('registers three tools when writing is disabled', () => {
+  it('registers three tools when writing is disabled', () => {
     expect(collectNames(CONFIG)).toEqual([
       'odoo_server_info',
       'odoo_describe_model',
@@ -53,15 +51,15 @@ describe('DSH plugin entry', () => {
     ])
   })
 
-  pluginIt('registers four tools when writing is enabled', () => {
+  it('registers four tools when writing is enabled', () => {
     expect(collectNames({ ...CONFIG, allowWrite: true })).toHaveLength(4)
   })
 
-  pluginIt('does not throw when credentials are missing', () => {
+  it('does not throw when credentials are missing', () => {
     expect(() => collectNames({})).not.toThrow()
   })
 
-  pluginIt('throws on an out-of-range numeric setting', () => {
+  it('throws on an out-of-range numeric setting', () => {
     expect(() => collectNames({ ...CONFIG, requestTimeoutMs: 0 })).toThrow()
   })
 })

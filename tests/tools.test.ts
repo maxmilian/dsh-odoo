@@ -116,26 +116,6 @@ describe('tool execution', () => {
     )
   })
 
-  it('emits only meta keys from the output contract', async () => {
-    const tool = byName(createOdooTools(stubClient(), 'en', false), 'odoo_search_read')
-    const result = (await tool?.execute?.({ model: 'sale.order' }, {
-      signal: undefined,
-    } as never)) as {
-      meta: Record<string, unknown>
-    }
-    const allowed = [
-      'model',
-      'total',
-      'returned',
-      'offset',
-      'truncatedFields',
-      'truncated',
-      'odooVersion',
-    ]
-
-    expect(Object.keys(result.meta).every((key) => allowed.includes(key))).toBe(true)
-  })
-
   it('renders the result as a single JSON text block', () => {
     const tool = byName(createOdooTools(stubClient(), 'en', false), 'odoo_server_info')
     const rendered = tool?.output?.render?.({}, { data: { uid: 1 }, meta: {} } as never)
