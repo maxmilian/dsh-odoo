@@ -26,7 +26,9 @@ const VERSION = { service: 'common', method: 'version', args: [] } as const
 
 describe('successful calls', () => {
   it('posts JSON-RPC 2.0 to the jsonrpc endpoint and returns result', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(json({ jsonrpc: '2.0', id: 1, result: { a: 1 } })))
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(json({ jsonrpc: '2.0', id: 1, result: { a: 1 } })),
+    )
     const transport = new RpcTransport({ ...OPTIONS, fetchImplementation: fetchMock })
 
     await expect(transport.call(VERSION)).resolves.toEqual({ a: 1 })
@@ -85,8 +87,7 @@ describe('transport probing', () => {
     ['405', () => Promise.resolve(new Response('nope', { status: 405 }))],
     [
       '302',
-      () =>
-        Promise.resolve(new Response('', { status: 302, headers: { Location: '/web/login' } })),
+      () => Promise.resolve(new Response('', { status: 302, headers: { Location: '/web/login' } })),
     ],
     [
       'html',
