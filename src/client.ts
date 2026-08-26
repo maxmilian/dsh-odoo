@@ -1,11 +1,17 @@
 import type { OdooConfig, ResolvedOdooConfig } from './config.js'
 import { assertCredentials, resolveConfig } from './config.js'
+import { validateDomain, validateFields, validateOrder, validatePagination } from './domain.js'
 import { configError, OdooApiError } from './errors.js'
 import type { ReadModel } from './models.js'
-import { isReadModel, MAX_DESCRIBE_FIELDS, MAX_SELECTION_OPTIONS } from './models.js'
+import {
+  isReadModel,
+  MAX_DESCRIBE_FIELDS,
+  MAX_SELECTION_OPTIONS,
+  MAX_STRING_CHARS,
+} from './models.js'
 import type { FetchImplementation } from './rpc.js'
 import { RpcTransport } from './rpc.js'
-import type { ApiResult, JsonObject, JsonValue } from './types.js'
+import type { ApiResult, JsonObject, JsonValue, SearchReadParams } from './types.js'
 
 export { resolveConfig }
 
@@ -70,6 +76,44 @@ export class OdooClient {
         model,
         returned: kept.length,
         ...(named.length > MAX_DESCRIBE_FIELDS ? { truncated: true } : {}),
+        ...(truncatedFields.length > 0 ? { truncatedFields } : {}),
+      },
+    }
+  }
+
+  /** Runs a restricted search_read on one allow-listed model. */
+  async searchRead(params: SearchReadParams, signal?: AbortSignal): Promise<ApiResult<JsonValue>> {
+    assertReadModel(params.model)
+    const model = params.model
+    const types = await this.fieldTypesFor(model, signal)
+    const known = new Set(types.keys())
+    const domain = validateDomain(params.domain ?? [], known)
+    const fields = validateFields(params.fields, model, types)
+    const order = validateOrder(params.order, known)
+    const { limit, offset } = validatePagination(
+      params.limit,
+      params.offset,
+      this.config.defaultLimit,
+    )
+    const total = await this.execute(model, 'search_count', [domain], {}, signal)
+    const rows = await this.execute(
+      model,
+      'search_read',
+      [domain],
+      { fields: [...fields], limit, offset, ...(order === undefined ? {} : { order }) },
+      signal,
+    )
+    const truncatedFields: string[] = []
+    const data = Array.isArray(rows)
+      ? rows.map((row) => trimRecord(row, truncatedFields))
+      : ([] as JsonValue[])
+    return {
+      data: data as JsonValue,
+      meta: {
+        model,
+        total: typeof total === 'number' ? total : data.length,
+        returned: data.length,
+        offset,
         ...(truncatedFields.length > 0 ? { truncatedFields } : {}),
       },
     }
@@ -266,6 +310,21 @@ function trimFieldMeta(name: string, meta: unknown, truncatedFields: string[]): 
       continue
     }
     trimmed[attribute] = value
+  }
+  return trimmed
+}
+
+/** Truncates over-long string values in one record and records their field names. */
+function trimRecord(row: unknown, truncatedFields: string[]): JsonValue {
+  if (!isJsonObject(row)) return row as JsonValue
+  const trimmed: JsonObject = {}
+  for (const [key, value] of Object.entries(row)) {
+    if (typeof value === 'string' && value.length > MAX_STRING_CHARS) {
+      trimmed[key] = `${value.slice(0, MAX_STRING_CHARS)}\u2026[truncated]`
+      if (!truncatedFields.includes(key)) truncatedFields.push(key)
+      continue
+    }
+    trimmed[key] = value
   }
   return trimmed
 }

@@ -12,6 +12,8 @@ const CONFIG = resolveConfig({
   maxResponseBytes: 100_000,
 })
 
+type FetchCall = [URL, RequestInit]
+
 const json = (body: unknown) =>
   new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } })
 
@@ -115,6 +117,7 @@ describe('company validation', () => {
 const FIELDS_GET = {
   id: { string: 'ID', type: 'integer' },
   name: { string: 'Name', type: 'char' },
+  partner_id: { string: 'Customer', type: 'many2one', relation: 'res.partner' },
   image_1920: { string: 'Image', type: 'binary' },
   signature: { string: 'Signature', type: 'binary' },
   state: {
@@ -134,7 +137,7 @@ describe('describeModel', () => {
     const result = await client.describeModel('sale.order')
 
     expect(result.meta.model).toBe('sale.order')
-    expect(Object.keys(result.data as object)).toEqual(['id', 'name', 'state'])
+    expect(Object.keys(result.data as object)).toEqual(['id', 'name', 'partner_id', 'state'])
     expect(result.data).toMatchObject({ name: { string: 'Name', type: 'char' } })
   })
 
@@ -187,5 +190,97 @@ describe('describeModel', () => {
 
     expect(result.meta.truncated).toBe(true)
     expect(result.meta.returned).toBe(200)
+  })
+})
+
+describe('searchRead', () => {
+  const records = [{ id: 1, name: 'ACME', partner_id: [4, 'ACME Inc'] }]
+
+  it('sends the model default fields when none are given', async () => {
+    const fetchMock = queueFetch([VERSION, 7, FIELDS_GET, 1, records])
+    const client = new OdooClient(CONFIG, fetchMock)
+
+    await client.searchRead({ model: 'sale.order' })
+
+    const body = JSON.parse(String((fetchMock.mock.calls[4] as unknown as FetchCall)[1].body))
+    expect(body.params.args[4]).toBe('search_read')
+    expect(body.params.args[6].fields).toContain('id')
+  })
+
+  it('returns total, returned, and offset in meta', async () => {
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, FIELDS_GET, 137, records]))
+
+    const result = await client.searchRead({ model: 'sale.order', fields: ['id', 'name'] })
+
+    expect(result.meta).toMatchObject({ model: 'sale.order', total: 137, returned: 1, offset: 0 })
+  })
+
+  it('truncates long string values and reports the field', async () => {
+    const long = [{ id: 1, name: 'x'.repeat(2_500) }]
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, FIELDS_GET, 1, long]))
+
+    const result = await client.searchRead({ model: 'sale.order', fields: ['id', 'name'] })
+    const record = (result.data as { name: string }[])[0]
+
+    expect(record?.name.endsWith('[truncated]')).toBe(true)
+    expect(result.meta.truncatedFields).toEqual(['name'])
+  })
+
+  it('keeps many2one values in the native pair shape', async () => {
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, FIELDS_GET, 1, records]))
+
+    const result = await client.searchRead({ model: 'sale.order', fields: ['id', 'partner_id'] })
+
+    expect((result.data as { partner_id: unknown }[])[0]?.partner_id).toEqual([4, 'ACME Inc'])
+  })
+
+  it('rejects a model outside the allow list', async () => {
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7]))
+
+    await expect(client.searchRead({ model: 'ir.attachment' })).rejects.toMatchObject({
+      code: 'MODEL_NOT_ALLOWED',
+    })
+  })
+
+  it('rejects an unknown field with the available field list', async () => {
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, FIELDS_GET]))
+
+    await expect(
+      client.searchRead({ model: 'sale.order', fields: ['nope'] }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+  })
+
+  it('rejects a binary field that is not on the fast-path list', async () => {
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, FIELDS_GET]))
+
+    await expect(
+      client.searchRead({ model: 'sale.order', fields: ['signature'] }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+  })
+
+  it('rejects a dotted domain field', async () => {
+    const client = new OdooClient(CONFIG, queueFetch([VERSION, 7, FIELDS_GET]))
+
+    await expect(
+      client.searchRead({ model: 'sale.order', domain: [['partner_id.name', '=', 'x']] }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+  })
+
+  it('passes allowed_company_ids in the context when configured', async () => {
+    const fetchMock = queueFetch([
+      VERSION,
+      7,
+      [{ id: 7, company_ids: [1, 2] }],
+      FIELDS_GET,
+      1,
+      records,
+    ])
+    const client = new OdooClient(resolveConfig({ ...CONFIG, companyId: 2 }), fetchMock)
+
+    await client.searchRead({ model: 'sale.order', fields: ['id'] })
+
+    const last = fetchMock.mock.calls.at(-1) as unknown as FetchCall
+    const body = JSON.parse(String(last[1].body))
+    expect(body.params.args[6].context).toEqual({ allowed_company_ids: [2] })
   })
 })
