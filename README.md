@@ -7,9 +7,15 @@ It lets an agent inspect Odoo business data — contacts, quotations, sales orde
 project tasks, leads, stock — without changing Odoo state. One opt-in tool can create a
 strictly limited draft record, and it is not even registered unless you enable it.
 
-> ⚠️ **Not yet validated against a live Odoo server.** Every compatibility assumption in this
-> release is taken from the Odoo documentation and covered by mocked tests only. Verify the
-> plugin against your own instance before relying on it.
+> ⚠️ **Not yet validated against a live Odoo server (as of 2026-08-27).** Every compatibility
+> assumption in this release is taken from the Odoo documentation and covered by mocked tests
+> only — not one has been confirmed against a real instance. The full list of assumptions, with
+> the fallback for each, is in [`docs/live-verification.md`](docs/live-verification.md).
+> The plugin speaks JSON-RPC only and needs `/jsonrpc` to be reachable (see
+> [Transport](#transport)). Verify it against your own instance before relying on it, and when
+> something breaks please report the Odoo version and serie, how it is deployed (Odoo Online,
+> Odoo.sh, self-hosted, container, and which reverse proxy sits in front), and the full output
+> of `odoo_server_info`.
 
 ## Tools
 
