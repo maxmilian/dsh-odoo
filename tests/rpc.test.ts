@@ -173,6 +173,20 @@ describe('response size limits', () => {
     await expect(transport.call(VERSION)).rejects.toMatchObject({ code: 'RESPONSE_TOO_LARGE' })
   })
 
+  it('reports an oversized HTTP 400 body as RESPONSE_TOO_LARGE', async () => {
+    const big = JSON.stringify({ error: { message: 'z'.repeat(20_000) } })
+    const transport = transportWith(() =>
+      Promise.resolve(
+        new Response(big, {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    await expect(transport.call(VERSION)).rejects.toMatchObject({ code: 'RESPONSE_TOO_LARGE' })
+  })
+
   it('honours a per-call override of the byte cap', async () => {
     const big = JSON.stringify({ jsonrpc: '2.0', id: 1, result: 'y'.repeat(20_000) })
     const transport = transportWith(() =>

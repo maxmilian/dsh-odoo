@@ -115,10 +115,14 @@ export class RpcTransport {
     return body.result as JsonValue
   }
 
-  /** Extracts a sanitized upstream message from a failed response body. */
+  /**
+   * Extracts a sanitized upstream message from a failed response body. Only a
+   * malformed or unexpected body is swallowed; an oversized one still fails.
+   */
   async #readErrorDetail(response: Response): Promise<string | undefined> {
+    const text = await readBoundedBody(response, this.#maxResponseBytes)
     try {
-      const body: unknown = JSON.parse(await readBoundedBody(response, this.#maxResponseBytes))
+      const body: unknown = JSON.parse(text)
       if (!isJsonObject(body) || !isJsonObject(body.error)) return undefined
       const nested = isJsonObject(body.error.data) ? body.error.data.message : undefined
       return sanitizeDetail(nested ?? body.error.message, this.#apiKey)
