@@ -21,9 +21,9 @@ export interface OdooMessages {
 const ENGLISH: OdooMessages = {
   serverInfoDescription: 'Read the connected Odoo server version and the authenticated user id.',
   describeModelDescription:
-    'List the queryable fields of one allow-listed Odoo model: name, type, label, relation, and selection values. Call this before building a domain for odoo_search_read.',
+    'List the queryable fields of one allow-listed Odoo model: name, type, label, relation, and selection values. Call this before building a domain for odoo_search_read. An allow-listed model exists on a given Odoo only if its module is installed, so this is also how to check that a model is available.',
   searchReadDescription:
-    "Run a restricted search_read on one allow-listed Odoo model. Domain field names may not contain dots, so related-record conditions are not possible: query the related model first, then filter with ('field_id','in',[ids]). Only non-archived records are returned. When fields are omitted, a fixed default field set for that model is used.",
+    "Run a restricted search_read on one allow-listed Odoo model. Domain field names may not contain dots, so related-record conditions are not possible: query the related model first, then filter with ('field_id','in',[ids]). Only non-archived records are returned. When fields are omitted, a fixed default field set for that model is used. An allow-listed model exists on a given Odoo only if its module is installed; call odoo_describe_model first when unsure.",
   createDraftDescription:
     'Create one draft record in Odoo. Only sale.order and project.task are allowed. A sale.order is always created with state=draft; a project.task may not specify state or stage_id, so Odoo applies its own default stage.',
   createDraftTitle: 'Create Odoo draft record',
@@ -43,9 +43,9 @@ const ENGLISH: OdooMessages = {
 const TRADITIONAL_CHINESE: OdooMessages = {
   serverInfoDescription: '讀取已連線 Odoo 伺服器的版本與目前登入的使用者 id。',
   describeModelDescription:
-    '列出白名單 Odoo model 的可查詢欄位：名稱、型別、標籤、關聯 model 與選項值。在為 odoo_search_read 組 domain 之前請先呼叫此工具。',
+    '列出白名單 Odoo model 的可查詢欄位：名稱、型別、標籤、關聯 model 與選項值。在為 odoo_search_read 組 domain 之前請先呼叫此工具。白名單 model 僅在該 Odoo 安裝了對應模組時才存在，因此本工具也是確認某個 model 是否可用的方式。',
   searchReadDescription:
-    "在白名單 Odoo model 上執行受限的 search_read。domain 的欄位名不得含點號，因此無法做關聯記錄條件：請先查詢關聯 model 取得 id，再用 ('field_id','in',[ids]) 過濾。只會回傳未封存的記錄。未指定 fields 時，會套用該 model 的固定預設欄位集。",
+    "在白名單 Odoo model 上執行受限的 search_read。domain 的欄位名不得含點號，因此無法做關聯記錄條件：請先查詢關聯 model 取得 id，再用 ('field_id','in',[ids]) 過濾。只會回傳未封存的記錄。未指定 fields 時，會套用該 model 的固定預設欄位集。白名單 model 僅在該 Odoo 安裝了對應模組時才存在；不確定時請先呼叫 odoo_describe_model。",
   createDraftDescription:
     '在 Odoo 建立一筆草稿記錄。僅允許 sale.order 與 project.task。sale.order 一律以 state=draft 建立；project.task 不得指定 state 或 stage_id，階段由 Odoo 套用預設階段。',
   createDraftTitle: '建立 Odoo 草稿記錄',
@@ -63,9 +63,9 @@ const TRADITIONAL_CHINESE: OdooMessages = {
 const SIMPLIFIED_CHINESE: OdooMessages = {
   serverInfoDescription: '读取已连接 Odoo 服务器的版本与当前登录的用户 id。',
   describeModelDescription:
-    '列出白名单 Odoo model 的可查询字段：名称、类型、标签、关联 model 与选项值。在为 odoo_search_read 组装 domain 之前请先调用此工具。',
+    '列出白名单 Odoo model 的可查询字段：名称、类型、标签、关联 model 与选项值。在为 odoo_search_read 组装 domain 之前请先调用此工具。白名单 model 仅在该 Odoo 安装了对应模块时才存在，因此本工具也是确认某个 model 是否可用的方式。',
   searchReadDescription:
-    "在白名单 Odoo model 上执行受限的 search_read。domain 的字段名不得包含点号，因此无法做关联记录条件：请先查询关联 model 获取 id，再用 ('field_id','in',[ids]) 过滤。只会返回未归档的记录。未指定 fields 时，会套用该 model 的固定默认字段集。",
+    "在白名单 Odoo model 上执行受限的 search_read。domain 的字段名不得包含点号，因此无法做关联记录条件：请先查询关联 model 获取 id，再用 ('field_id','in',[ids]) 过滤。只会返回未归档的记录。未指定 fields 时，会套用该 model 的固定默认字段集。白名单 model 仅在该 Odoo 安装了对应模块时才存在；不确定时请先调用 odoo_describe_model。",
   createDraftDescription:
     '在 Odoo 创建一条草稿记录。仅允许 sale.order 与 project.task。sale.order 一律以 state=draft 创建；project.task 不得指定 state 或 stage_id，阶段由 Odoo 套用默认阶段。',
   createDraftTitle: '创建 Odoo 草稿记录',
@@ -84,9 +84,9 @@ const SIMPLIFIED_CHINESE: OdooMessages = {
 const JAPANESE: OdooMessages = {
   serverInfoDescription: '接続中の Odoo サーバーのバージョンと認証済みユーザー id を読み取ります。',
   describeModelDescription:
-    '許可リストにある Odoo model の照会可能なフィールド（名前、型、ラベル、リレーション、選択肢）を一覧します。odoo_search_read の domain を組み立てる前に呼び出してください。',
+    '許可リストにある Odoo model の照会可能なフィールド（名前、型、ラベル、リレーション、選択肢）を一覧します。odoo_search_read の domain を組み立てる前に呼び出してください。許可リストの model は、そのモジュールがインストールされている場合にのみ存在しますので、model が利用可能かの確認にも使えます。',
   searchReadDescription:
-    "許可リストにある Odoo model に対して制限付きの search_read を実行します。domain のフィールド名にドットは使えないため、関連レコード条件は指定できません。まず関連 model を照会して id を取得し、('field_id','in',[ids]) で絞り込んでください。アーカイブされていないレコードのみを返します。fields を省略した場合、その model の既定フィールドセットが使われます。",
+    "許可リストにある Odoo model に対して制限付きの search_read を実行します。domain のフィールド名にドットは使えないため、関連レコード条件は指定できません。まず関連 model を照会して id を取得し、('field_id','in',[ids]) で絞り込んでください。アーカイブされていないレコードのみを返します。fields を省略した場合、その model の既定フィールドセットが使われます。許可リストの model は、そのモジュールがインストールされている場合にのみ存在します。不明な場合はまず odoo_describe_model を呼び出してください。",
   createDraftDescription:
     'Odoo にドラフトレコードを 1 件作成します。許可されるのは sale.order と project.task のみです。sale.order は常に state=draft で作成され、project.task は state や stage_id を指定できず、ステージは Odoo の既定のステージが適用されます。',
   createDraftTitle: 'Odoo のドラフトレコードを作成',

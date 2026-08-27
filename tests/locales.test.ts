@@ -89,6 +89,20 @@ describe('tool metadata locales', () => {
     }
   })
 
+  const MODULE_CAVEAT = {
+    en: 'only if its module is installed',
+    'zh-TW': '僅在該 Odoo 安裝了對應模組時才存在',
+    'zh-CN': '仅在该 Odoo 安装了对应模块时才存在',
+    ja: 'そのモジュールがインストールされている場合にのみ存在します',
+  } as const
+
+  it('warns that an allow-listed model may not exist on this Odoo', () => {
+    for (const locale of LOCALES) {
+      expect(MESSAGES[locale].searchReadDescription, locale).toContain(MODULE_CAVEAT[locale])
+      expect(MESSAGES[locale].describeModelDescription, locale).toContain(MODULE_CAVEAT[locale])
+    }
+  })
+
   it('falls back to English for an unknown locale', () => {
     expect(odooMessages('xx' as never)).toBe(MESSAGES.en)
   })
