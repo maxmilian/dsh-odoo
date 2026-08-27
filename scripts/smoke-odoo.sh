@@ -22,10 +22,9 @@ done
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repository_root"
 
-if [ ! -f lib/index.js ]; then
-  echo "Building the plugin first..."
-  bun run build
-fi
+# Always rebuild: a stale lib/ has already produced a wrong live verdict once.
+echo "Building the plugin first..."
+bun run build
 
 node --input-type=module --eval "
 import { createOdooClient } from './lib/index.js'
