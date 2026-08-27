@@ -127,7 +127,8 @@ export class OdooClient {
       throw invalidResponse('search_read', model)
     }
     const truncatedFields: string[] = []
-    const data = rows.map((row) => trimRecord(row, truncatedFields))
+    const allowed = new Set<string>([...fields, 'id'])
+    const data = rows.map((row) => trimRecord(row, truncatedFields, allowed))
     return {
       data: data as JsonValue,
       meta: {
@@ -179,7 +180,7 @@ export class OdooClient {
         model,
       })
     }
-    return { data: record, meta: { model } }
+    return { data: pick(record, CREATE_READBACK_FIELDS[model]), meta: { model } }
   }
 
   /** Loads and caches the raw fields_get payload for one model. */
@@ -400,11 +401,28 @@ function trimFieldMeta(name: string, meta: unknown, truncatedFields: string[]): 
   return trimmed
 }
 
-/** Truncates over-long string values in one record and records their field names. */
-function trimRecord(row: unknown, truncatedFields: string[]): JsonValue {
+/** Keeps only the named keys of a record, dropping anything the upstream added. */
+function pick(record: JsonObject, keys: readonly string[]): JsonObject {
+  const picked: JsonObject = {}
+  for (const key of keys) {
+    if (Object.hasOwn(record, key)) picked[key] = record[key] as JsonValue
+  }
+  return picked
+}
+
+/**
+ * Projects one record onto the allowed field set and truncates over-long string
+ * values, recording the field names that were truncated.
+ */
+function trimRecord(
+  row: unknown,
+  truncatedFields: string[],
+  allowed: ReadonlySet<string>,
+): JsonValue {
   if (!isJsonObject(row)) return row as JsonValue
   const trimmed: JsonObject = {}
   for (const [key, value] of Object.entries(row)) {
+    if (!allowed.has(key)) continue
     if (typeof value === 'string' && value.length > MAX_STRING_CHARS) {
       trimmed[key] = `${value.slice(0, MAX_STRING_CHARS)}\u2026[truncated]`
       if (!truncatedFields.includes(key)) truncatedFields.push(key)
