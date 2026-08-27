@@ -76,3 +76,51 @@ describe('createDraft response projection', () => {
     expect(result.data).toEqual({ id: 42, name: 'S0001', state: 'draft' })
   })
 })
+
+const LONG = 'x'.repeat(2_500)
+
+const nestedSearchRead = (row: Record<string, unknown>) =>
+  fakeOdoo([
+    handshakeHandler(),
+    callHandler('fields_get', () => FIELDS_GET),
+    callHandler('search_count', () => 1),
+    callHandler('search_read', () => [row]),
+  ])
+
+describe('nested value sanitizing', () => {
+  it('truncates the display name inside a many2one pair', async () => {
+    const client = new OdooClient(CONFIG, nestedSearchRead({ id: 1, partner_id: [4, LONG] }))
+
+    const result = await client.searchRead({ model: 'sale.order', fields: ['id', 'partner_id'] })
+    const pair = (result.data as { partner_id: [number, string] }[])[0]?.partner_id
+
+    expect(pair?.[0]).toBe(4)
+    expect(pair?.[1].endsWith('[truncated]')).toBe(true)
+    expect(pair?.[1].length).toBeLessThan(LONG.length)
+    expect(result.meta.truncatedFields).toEqual(['partner_id'])
+  })
+
+  it('truncates strings nested inside an object value', async () => {
+    const client = new OdooClient(
+      CONFIG,
+      nestedSearchRead({ id: 1, name: { deep: { deeper: LONG } } }),
+    )
+
+    const result = await client.searchRead({ model: 'sale.order', fields: ['id', 'name'] })
+    const nested = (result.data as { name: { deep: { deeper: string } } }[])[0]?.name
+
+    expect(nested?.deep.deeper.endsWith('[truncated]')).toBe(true)
+    expect(result.meta.truncatedFields).toEqual(['name'])
+  })
+
+  it('caps the nesting depth an upstream can force', async () => {
+    let deep: unknown = LONG
+    for (let level = 0; level < 40; level += 1) deep = [deep]
+    const client = new OdooClient(CONFIG, nestedSearchRead({ id: 1, name: deep }))
+
+    const result = await client.searchRead({ model: 'sale.order', fields: ['id', 'name'] })
+
+    expect(JSON.stringify(result.data)).not.toContain(LONG)
+    expect(result.meta.truncatedFields).toEqual(['name'])
+  })
+})

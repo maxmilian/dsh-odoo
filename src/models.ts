@@ -184,6 +184,9 @@ export const MAX_IN_VALUES = 100
 /** Maximum characters kept from a single string field value. */
 export const MAX_STRING_CHARS = 2000
 
+/** Maximum nesting depth kept when sanitizing a returned field value. */
+export const MAX_VALUE_DEPTH = 8
+
 /** Maximum fields returned by the describe tool. */
 export const MAX_DESCRIBE_FIELDS = 200
 

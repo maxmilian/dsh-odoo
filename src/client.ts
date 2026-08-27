@@ -17,6 +17,7 @@ import {
   MAX_DESCRIBE_FIELDS,
   MAX_SELECTION_OPTIONS,
   MAX_STRING_CHARS,
+  MAX_VALUE_DEPTH,
 } from './models.js'
 import type { FetchImplementation } from './rpc.js'
 import { RpcTransport } from './rpc.js'
@@ -410,9 +411,37 @@ function pick(record: JsonObject, keys: readonly string[]): JsonObject {
   return picked
 }
 
+/** Truncates one over-long string value. */
+function truncateString(value: string, onTruncate: () => void): JsonValue {
+  if (value.length <= MAX_STRING_CHARS) return value
+  onTruncate()
+  return `${value.slice(0, MAX_STRING_CHARS)}\u2026[truncated]`
+}
+
+/**
+ * Truncates every string reachable from one field value, keeping the shape of
+ * many2one pairs and nested objects, and dropping anything past the depth cap.
+ */
+function sanitizeValue(value: JsonValue, depth: number, onTruncate: () => void): JsonValue {
+  if (typeof value === 'string') return truncateString(value, onTruncate)
+  if (!Array.isArray(value) && !isJsonObject(value)) return value
+  if (depth >= MAX_VALUE_DEPTH) {
+    onTruncate()
+    return null
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeValue(item as JsonValue, depth + 1, onTruncate))
+  }
+  const nested: JsonObject = {}
+  for (const [key, item] of Object.entries(value)) {
+    nested[key] = sanitizeValue(item, depth + 1, onTruncate)
+  }
+  return nested
+}
+
 /**
  * Projects one record onto the allowed field set and truncates over-long string
- * values, recording the field names that were truncated.
+ * values at any depth, recording the field names that were truncated.
  */
 function trimRecord(
   row: unknown,
@@ -423,12 +452,9 @@ function trimRecord(
   const trimmed: JsonObject = {}
   for (const [key, value] of Object.entries(row)) {
     if (!allowed.has(key)) continue
-    if (typeof value === 'string' && value.length > MAX_STRING_CHARS) {
-      trimmed[key] = `${value.slice(0, MAX_STRING_CHARS)}\u2026[truncated]`
+    trimmed[key] = sanitizeValue(value, 0, () => {
       if (!truncatedFields.includes(key)) truncatedFields.push(key)
-      continue
-    }
-    trimmed[key] = value
+    })
   }
   return trimmed
 }
