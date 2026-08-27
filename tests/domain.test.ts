@@ -24,6 +24,28 @@ const SALE_ORDER_TYPES = new Map<string, string>([
   ...TYPES,
 ])
 
+const WITH_ACTIVE = new Set([...FIELDS, 'active'])
+
+describe('the archived-record guarantee', () => {
+  it.each([[['active', '=', false]], [['active', 'in', [true, false]]], [['active', '!=', true]]])(
+    'rejects a domain leaf that reopens archived records: %j',
+    (leaf) => {
+      expect(() => validateDomain([leaf], WITH_ACTIVE)).toThrow(OdooApiError)
+    },
+  )
+
+  it('rejects active nested under a logical operator', () => {
+    expect(() =>
+      validateDomain(['|', ['name', '=', 'x'], ['active', '=', false]], WITH_ACTIVE),
+    ).toThrow(OdooApiError)
+  })
+
+  it('still allows active as a requested field', () => {
+    const types = new Map([...SALE_ORDER_TYPES, ['active', 'boolean']])
+    expect(validateFields(['id', 'active'], 'sale.order', types)).toEqual(['id', 'active'])
+  })
+})
+
 describe('validateDomain', () => {
   it('accepts an empty domain', () => {
     expect(validateDomain([], FIELDS)).toEqual([])

@@ -38,6 +38,13 @@ const OPERATORS: ReadonlySet<string> = new Set([
   '=ilike',
 ])
 
+/**
+ * Fields a domain may not mention. Odoo only applies its implicit
+ * "not archived" filter when the domain says nothing about active, so allowing
+ * it would break the guarantee the tool descriptions make.
+ */
+const DOMAIN_DENIED_FIELDS: ReadonlySet<string> = new Set(['active'])
+
 interface ParseState {
   readonly domain: readonly unknown[]
   readonly knownFields: ReadonlySet<string>
@@ -84,12 +91,21 @@ function assertScalar(value: unknown, where: string): void {
   throw inputError(`${where} must be a string, number, boolean, or null.`)
 }
 
+/** Validates one domain field name and rejects the fields the policy denies. */
+function assertDomainField(field: unknown, state: ParseState, index: number): void {
+  const where = `domain field at index ${index}`
+  const name = assertFieldName(field, state.knownFields, where, state.binaryFields)
+  if (DOMAIN_DENIED_FIELDS.has(name)) {
+    throw inputError(`${where} may not be ${name}; searches only return non-archived records.`)
+  }
+}
+
 /** Validates one domain leaf and counts it. */
 function assertLeaf(state: ParseState, node: unknown, index: number): void {
   if (!Array.isArray(node) || node.length !== 3) {
     throw inputError(`domain element at index ${index} must be a triple.`)
   }
-  assertFieldName(node[0], state.knownFields, `domain field at index ${index}`, state.binaryFields)
+  assertDomainField(node[0], state, index)
   if (typeof node[1] !== 'string' || !OPERATORS.has(node[1])) {
     throw inputError(`domain operator at index ${index} is not supported.`)
   }
