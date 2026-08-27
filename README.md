@@ -80,7 +80,7 @@ tool names and error messages always stay in English.
   single string values truncated at 2000 characters, and a hard byte cap on every response.
 - **Only non-archived records** are returned; the `active_test` context is not exposed.
 - **Draft creation is opt-in and fixed.** `sale.order` is always created with `state=draft`;
-  `project.task` may not specify `state` or `stage_id` and lands in its project's first stage.
+  `project.task` may not specify `state` or `stage_id`, so Odoo applies its own default stage.
   Only an allow-listed subset of fields is accepted, and one-to-many commands are rejected.
 
 ## Non-goals for 0.1

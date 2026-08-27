@@ -25,7 +25,7 @@ const ENGLISH: OdooMessages = {
   searchReadDescription:
     "Run a restricted search_read on one allow-listed Odoo model. Domain field names may not contain dots, so related-record conditions are not possible: query the related model first, then filter with ('field_id','in',[ids]). Only non-archived records are returned. When fields are omitted, a fixed default field set for that model is used.",
   createDraftDescription:
-    'Create one draft record in Odoo. Only sale.order and project.task are allowed. A sale.order is always created with state=draft; a project.task may not specify state or stage_id and lands in the first stage of its project.',
+    'Create one draft record in Odoo. Only sale.order and project.task are allowed. A sale.order is always created with state=draft; a project.task may not specify state or stage_id, so Odoo applies its own default stage.',
   createDraftTitle: 'Create Odoo draft record',
   modelParam: 'Odoo model to query; only allow-listed models are accepted',
   describeModelParam: 'Odoo model to describe; only allow-listed models are accepted',
@@ -47,7 +47,7 @@ const TRADITIONAL_CHINESE: OdooMessages = {
   searchReadDescription:
     "在白名單 Odoo model 上執行受限的 search_read。domain 的欄位名不得含點號，因此無法做關聯記錄條件：請先查詢關聯 model 取得 id，再用 ('field_id','in',[ids]) 過濾。只會回傳未封存的記錄。未指定 fields 時，會套用該 model 的固定預設欄位集。",
   createDraftDescription:
-    '在 Odoo 建立一筆草稿記錄。僅允許 sale.order 與 project.task。sale.order 一律以 state=draft 建立；project.task 不得指定 state 或 stage_id，會落在其專案的第一個階段。',
+    '在 Odoo 建立一筆草稿記錄。僅允許 sale.order 與 project.task。sale.order 一律以 state=draft 建立；project.task 不得指定 state 或 stage_id，階段由 Odoo 套用預設階段。',
   createDraftTitle: '建立 Odoo 草稿記錄',
   modelParam: '要查詢的 Odoo model；僅接受白名單內的 model',
   describeModelParam: '要描述的 Odoo model；僅接受白名單內的 model',
@@ -67,7 +67,7 @@ const SIMPLIFIED_CHINESE: OdooMessages = {
   searchReadDescription:
     "在白名单 Odoo model 上执行受限的 search_read。domain 的字段名不得包含点号，因此无法做关联记录条件：请先查询关联 model 获取 id，再用 ('field_id','in',[ids]) 过滤。只会返回未归档的记录。未指定 fields 时，会套用该 model 的固定默认字段集。",
   createDraftDescription:
-    '在 Odoo 创建一条草稿记录。仅允许 sale.order 与 project.task。sale.order 一律以 state=draft 创建；project.task 不得指定 state 或 stage_id，会落在其项目的第一个阶段。',
+    '在 Odoo 创建一条草稿记录。仅允许 sale.order 与 project.task。sale.order 一律以 state=draft 创建；project.task 不得指定 state 或 stage_id，阶段由 Odoo 套用默认阶段。',
   createDraftTitle: '创建 Odoo 草稿记录',
   modelParam: '要查询的 Odoo model；仅接受白名单内的 model',
   describeModelParam: '要描述的 Odoo model；仅接受白名单内的 model',
@@ -88,7 +88,7 @@ const JAPANESE: OdooMessages = {
   searchReadDescription:
     "許可リストにある Odoo model に対して制限付きの search_read を実行します。domain のフィールド名にドットは使えないため、関連レコード条件は指定できません。まず関連 model を照会して id を取得し、('field_id','in',[ids]) で絞り込んでください。アーカイブされていないレコードのみを返します。fields を省略した場合、その model の既定フィールドセットが使われます。",
   createDraftDescription:
-    'Odoo にドラフトレコードを 1 件作成します。許可されるのは sale.order と project.task のみです。sale.order は常に state=draft で作成され、project.task は state や stage_id を指定できず、プロジェクトの最初のステージに置かれます。',
+    'Odoo にドラフトレコードを 1 件作成します。許可されるのは sale.order と project.task のみです。sale.order は常に state=draft で作成され、project.task は state や stage_id を指定できず、ステージは Odoo の既定のステージが適用されます。',
   createDraftTitle: 'Odoo のドラフトレコードを作成',
   modelParam: '照会する Odoo model。許可リストにある model のみ受け付けます',
   describeModelParam: '説明する Odoo model。許可リストにある model のみ受け付けます',

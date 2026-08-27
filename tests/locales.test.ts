@@ -49,6 +49,28 @@ describe('tool metadata locales', () => {
     }
   })
 
+  const DEFAULT_STAGE = {
+    en: 'default stage',
+    'zh-TW': '預設階段',
+    'zh-CN': '默认阶段',
+    ja: '既定のステージ',
+  } as const
+
+  const FIRST_STAGE = {
+    en: 'first stage',
+    'zh-TW': '第一個階段',
+    'zh-CN': '第一个阶段',
+    ja: '最初のステージ',
+  } as const
+
+  it('promises only the Odoo default stage for a project task', () => {
+    for (const locale of LOCALES) {
+      const description = MESSAGES[locale].createDraftDescription
+      expect(description, locale).toContain(DEFAULT_STAGE[locale])
+      expect(description, locale).not.toContain(FIRST_STAGE[locale])
+    }
+  })
+
   it('falls back to English for an unknown locale', () => {
     expect(odooMessages('xx' as never)).toBe(MESSAGES.en)
   })

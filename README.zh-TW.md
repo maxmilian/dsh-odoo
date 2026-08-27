@@ -73,7 +73,7 @@ plugin config 的優先序高於環境變數：
   單一字串值超過 2000 字元會截斷，並且每個回應都有硬性位元組上限。
 - **只回傳未封存的記錄**；不開放 `active_test` context。
 - **草稿建立需開啟且形式固定。** `sale.order` 一律以 `state=draft` 建立；
-  `project.task` 不得指定 `state` 或 `stage_id`，會落在其專案的第一個階段。
+  `project.task` 不得指定 `state` 或 `stage_id`，階段由 Odoo 套用預設階段。
   只接受白名單欄位，並拒絕 one-to-many 命令。
 
 ## 0.1 的非目標
