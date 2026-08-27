@@ -63,9 +63,13 @@ export class OdooClient {
     })
   }
 
-  /** Returns the Odoo server version and the authenticated user id. */
-  async serverInfo(signal?: AbortSignal): Promise<ApiResult<JsonObject>> {
-    const handshake = await this.connect(signal)
+  /**
+   * Returns the Odoo server version and the authenticated user id. The signal is
+   * accepted for a uniform tool surface but not applied: this call only performs
+   * the shared handshake, which the request timeout bounds.
+   */
+  async serverInfo(_signal?: AbortSignal): Promise<ApiResult<JsonObject>> {
+    const handshake = await this.connect()
     const serverVersion = stringOr(handshake.version.server_version, 'unknown')
     return {
       data: {
@@ -234,9 +238,13 @@ export class OdooClient {
     return this.#fieldTypes.get(model) ?? new Map<string, string>()
   }
 
-  /** Performs the handshake once per plugin instance, retrying after a failure. */
-  protected connect(signal?: AbortSignal): Promise<Handshake> {
-    this.#handshake ??= this.performHandshake(signal).catch((error: unknown) => {
+  /**
+   * Performs the handshake once per plugin instance, retrying after a failure.
+   * The shared attempt is bounded by the request timeout only: binding it to one
+   * caller's AbortSignal would cancel it for every concurrent caller too.
+   */
+  protected connect(): Promise<Handshake> {
+    this.#handshake ??= this.performHandshake().catch((error: unknown) => {
       this.#handshake = undefined
       throw error
     })
@@ -252,7 +260,7 @@ export class OdooClient {
     signal?: AbortSignal,
     maxResponseBytesOverride?: number,
   ): Promise<JsonValue> {
-    const { uid } = await this.connect(signal)
+    const { uid } = await this.connect()
     return this.#transport.call(
       {
         service: 'object',
@@ -283,25 +291,19 @@ export class OdooClient {
     return this.#config
   }
 
-  async #performHandshakeSteps(signal?: AbortSignal): Promise<Handshake> {
+  async #performHandshakeSteps(): Promise<Handshake> {
     assertCredentials(this.#config)
-    const version = await this.#transport.call(
-      { service: 'common', method: 'version', args: [] },
-      signal,
-    )
+    const version = await this.#transport.call({ service: 'common', method: 'version', args: [] })
     if (!isJsonObject(version)) {
       throw new OdooApiError('Odoo returned an unexpected version payload.', {
         code: 'INVALID_RESPONSE',
       })
     }
-    const uid = await this.#transport.call(
-      {
-        service: 'common',
-        method: 'authenticate',
-        args: [this.#config.db, this.#config.username, this.#config.apiKey, {}],
-      },
-      signal,
-    )
+    const uid = await this.#transport.call({
+      service: 'common',
+      method: 'authenticate',
+      args: [this.#config.db, this.#config.username, this.#config.apiKey, {}],
+    })
     if (!Number.isSafeInteger(uid) || (uid as number) < 1) {
       throw new OdooApiError('Odoo rejected the credentials. Check db, username, and apiKey.', {
         code: 'AUTHENTICATION_FAILED',
@@ -310,31 +312,28 @@ export class OdooClient {
     return { uid: uid as number, version }
   }
 
-  private async performHandshake(signal?: AbortSignal): Promise<Handshake> {
-    const handshake = await this.#performHandshakeSteps(signal)
-    await this.#assertCompanyAllowed(handshake.uid, signal)
+  private async performHandshake(): Promise<Handshake> {
+    const handshake = await this.#performHandshakeSteps()
+    await this.#assertCompanyAllowed(handshake.uid)
     return handshake
   }
 
-  async #assertCompanyAllowed(uid: number, signal?: AbortSignal): Promise<void> {
+  async #assertCompanyAllowed(uid: number): Promise<void> {
     const companyId = this.#config.companyId
     if (companyId === undefined) return
-    const rows = await this.#transport.call(
-      {
-        service: 'object',
-        method: 'execute_kw',
-        args: [
-          this.#config.db,
-          uid,
-          this.#config.apiKey,
-          'res.users',
-          'read',
-          [[uid], ['company_ids']],
-          {},
-        ],
-      },
-      signal,
-    )
+    const rows = await this.#transport.call({
+      service: 'object',
+      method: 'execute_kw',
+      args: [
+        this.#config.db,
+        uid,
+        this.#config.apiKey,
+        'res.users',
+        'read',
+        [[uid], ['company_ids']],
+        {},
+      ],
+    })
     const record = Array.isArray(rows) ? rows[0] : undefined
     const allowed = isJsonObject(record) ? record.company_ids : undefined
     if (!Array.isArray(allowed) || !allowed.includes(companyId)) {
