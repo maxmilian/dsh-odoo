@@ -31,6 +31,12 @@ import type {
 
 export { resolveConfig }
 
+/**
+ * Relaxed response cap for fields_get. A full fields_get on account.move or
+ * res.partner easily exceeds the 1 MB default, and every tool depends on it.
+ */
+const FIELDS_GET_MAX_RESPONSE_BYTES = 8_000_000
+
 interface Handshake {
   readonly uid: number
   readonly version: JsonObject
@@ -202,6 +208,7 @@ export class OdooClient {
       [[]],
       { attributes: ['string', 'type', 'relation', 'selection', 'required', 'readonly'] },
       signal,
+      Math.max(this.#config.maxResponseBytes, FIELDS_GET_MAX_RESPONSE_BYTES),
     )
     if (!isJsonObject(raw)) {
       throw new OdooApiError('Odoo returned an unexpected fields_get payload.', {
