@@ -41,11 +41,29 @@ describe('tool metadata locales', () => {
     }
   })
 
-  it('states the dot restriction and the archived-record rule in every locale', () => {
+  const DOT_RESTRICTION = {
+    en: 'may not contain dots',
+    'zh-TW': '不得含點號',
+    'zh-CN': '不得包含点号',
+    ja: 'ドットは使えない',
+  } as const
+
+  const ARCHIVED_RULE = {
+    en: 'Only non-archived records are returned',
+    'zh-TW': '只會回傳未封存的記錄',
+    'zh-CN': '只会返回未归档的记录',
+    ja: 'アーカイブされていないレコードのみを返します',
+  } as const
+
+  it('states the dot restriction in every locale', () => {
     for (const locale of LOCALES) {
-      const description = MESSAGES[locale].searchReadDescription
-      expect(description).toMatch(/\bin\b/)
-      expect(description.length).toBeGreaterThan(80)
+      expect(MESSAGES[locale].searchReadDescription, locale).toContain(DOT_RESTRICTION[locale])
+    }
+  })
+
+  it('states the archived-record rule in every locale', () => {
+    for (const locale of LOCALES) {
+      expect(MESSAGES[locale].searchReadDescription, locale).toContain(ARCHIVED_RULE[locale])
     }
   })
 
