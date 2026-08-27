@@ -569,10 +569,17 @@ smoke test 的 grep 字串與此處的 tarball 檔名要一起改。**
 
 ---
 
-## 9. Live 驗證計畫（**目前手上沒有可實測的 Odoo**）
+## 9. Live 驗證計畫（**已於 2026-08-27 驗證於 Odoo 18**）
 
-v0.1 的所有相容性假設一律採保守寫法，README 明白標示「尚未對真實 Odoo 做過 live 驗證」，
-待第一次接到真實實例後補上「驗證於 Odoo x.y，日期 yyyy-mm-dd」。
+> **狀態更新（2026-08-27）**：已對官方 `odoo:18` image（`server_version` `18.0-20260817`）
+> 完成 live verification。下表每一列都補上了驗證狀態；完整實測記錄、政策邊界實測結果、
+> 以及**仍未驗證的範圍**（只驗 Odoo 18、只驗直連 Docker image、多公司只驗錯誤路徑）
+> 見 [`docs/live-verification.md`](../../live-verification.md)。
+> 該次驗證另外發現一項本節原本沒有的問題：**白名單的 14 個 model 不保證存在**，
+> 取決於該 Odoo 安裝了哪些業務模組。
+
+v0.1 的所有相容性假設一律採保守寫法，README 原本標示「尚未對真實 Odoo 做過 live 驗證」，
+現已更新為「驗證於 Odoo 18，日期 2026-08-27」並保留未驗範圍的說明。
 
 `scripts/smoke-odoo.sh`（手動執行，不進 CI）依序跑：`odoo_server_info` →
 `odoo_describe_model('res.partner')` → `odoo_search_read('res.partner')` →
@@ -580,19 +587,21 @@ v0.1 的所有相容性假設一律採保守寫法，README 明白標示「尚�
 
 ### 第一次接到真實 Odoo 時必須驗證的假設清單
 
-| # | 假設 | 若不成立的回退方案 |
-| --- | --- | --- |
-| 1 | `/jsonrpc` 存在且接受 `service: common/object` | 已有 `TRANSPORT_UNSUPPORTED` 明確錯誤；若普遍不成立才開 0.2 做 XML-RPC |
-| 2 | JSON-RPC 錯誤時 HTTP 為 200、錯誤在 `error.data.name` / `error.data.message` | HTTP 分支已先接住；補測試案例即可 |
-| 3 | Odoo API Key 可直接當 `authenticate` 的 password 使用 | 回退成要求使用者填真實密碼，README 加註 |
-| 4 | db 名錯誤時訊息可辨識（§2.5 最後一列） | 移除該列特判，一律回 `AUTHENTICATION_FAILED` |
-| 5 | 欄位名打錯時 `error.data.name` 是 `builtins.ValueError` 或 `builtins.KeyError` | 若是別的 exception 名稱，把它加進 §6.2 的 G2 白名單與 `ODOO_QUERY_ERROR` 對應表 |
-| 6 | **`active_test` 隱含過濾**：search/search_read 預設只回 `active = true` 的記錄 | 若成立（預期成立）：維持不開放該 context，工具描述已明說「只回未封存記錄」，`DEFAULT_FIELDS` 不含 `active`。若不成立（某版本預設回全部）：`DEFAULT_FIELDS` 補回 `active` 並修正工具描述 |
-| 7 | **`allowed_company_ids` 的實際效果**：只在有多公司 record rule 的 model 上生效，對 `res.users` / `product.template` 未必過濾 | handshake 已驗 `companyId ∈ company_ids`（§2.4），避免誤導成 `PERMISSION_DENIED`。若實測發現對某些 model 完全無效，README 明寫「companyId 只影響有多公司規則的 model」，不擴大實作 |
-| 8 | model 不存在（模組未安裝）時的 `error.data.name` 值 | 目前保守歸類為 `ODOO_RPC_ERROR`；實測後若有穩定 exception 名稱，再對應成 `NOT_FOUND` 並在訊息提示「模組未安裝」 |
-| 9 | `fields_get` 的 `attributes` 參數受支援 | **不是 no-op 回退**：改用最小 attribute 集 `fields_get([], ['type'])`；若連 `attributes` 都不支援，該次 `fields_get` 請求**單獨**把 byte 上限放寬到 `max(maxResponseBytes, 8 MB)`。原因：完整 `fields_get`（`account.move` / `res.partner`）輕易超過 1 MB 預設值，而欄位型別快取是所有工具的前置步驟——不放寬會讓**每個工具一起壞成 `RESPONSE_TOO_LARGE`** |
-| 10 | 建立 `project.task` 不指定 `stage_id` 時會落在第一個階段 | 若落在別處，改為先查該 project 的最小 sequence stage 再顯式帶入 |
-| 11 | `sale.order` 只給 `partner_id` 即可建立（pricelist/company 由 onchange 補上） | 若 Odoo 丟 `UserError`（缺 pricelist），G2 已會把原因透出；必要時把 `pricelist_id` 加進 create 允許欄位 |
+| # | 假設 | 驗證狀態（2026-08-27, Odoo 18） | 若不成立的回退方案 |
+| --- | --- | --- | --- |
+| 1 | `/jsonrpc` 存在且接受 `service: common/object` | ✅ 成立（官方 image 開箱即用，handshake 兩步通過） | 已有 `TRANSPORT_UNSUPPORTED` 明確錯誤；若普遍不成立才開 0.2 做 XML-RPC |
+| 2 | JSON-RPC 錯誤時 HTTP 為 200、錯誤在 `error.data.name` / `error.data.message` | ✅ 成立（兩條錯誤路徑皆照此形狀回） | HTTP 分支已先接住；補測試案例即可 |
+| 3 | Odoo API Key 可直接當 `authenticate` 的 password 使用 | ⬜ 未驗證（未載明所用為 key 或密碼） | 回退成要求使用者填真實密碼，README 加註 |
+| 4 | db 名錯誤時訊息可辨識（§2.5 最後一列） | ⬜ 未驗證（未刻意填錯 db 名） | 移除該列特判，一律回 `AUTHENTICATION_FAILED` |
+| 5 | 欄位名打錯時 `error.data.name` 是 `builtins.ValueError` 或 `builtins.KeyError` | ⬜ 未驗證（客戶端先擋，此路徑幾乎不可達） | 若是別的 exception 名稱，把它加進 §6.2 的 G2 白名單與 `ODOO_QUERY_ERROR` 對應表 |
+| 6 | **`active_test` 隱含過濾**：search/search_read 預設只回 `active = true` 的記錄 | ✅ 成立（預設 39／`active_test:false` 43／domain 寫 `active` 撈到 4 筆封存記錄——證實 domain 擋 `active` 是必要防線） | 若成立（預期成立）：維持不開放該 context，工具描述已明說「只回未封存記錄」，`DEFAULT_FIELDS` 不含 `active`。若不成立（某版本預設回全部）：`DEFAULT_FIELDS` 補回 `active` 並修正工具描述 |
+| 7 | **`allowed_company_ids` 的實際效果**：只在有多公司 record rule 的 model 上生效，對 `res.users` / `product.template` 未必過濾 | 🟡 錯誤路徑成立（無權 company → `Access to unauthorized or invalid companies.`）；合法 companyId 的過濾效果未驗 | handshake 已驗 `companyId ∈ company_ids`（§2.4），避免誤導成 `PERMISSION_DENIED`。若實測發現對某些 model 完全無效，README 明寫「companyId 只影響有多公司規則的 model」，不擴大實作 |
+| 8 | model 不存在（模組未安裝）時的 `error.data.name` 值 | ✅ 已測得：`odoo.exceptions.UserError` + `"Object sale.order doesn't exist"`。**結論是無專屬名稱**，UserError 過於泛用，依本列原訂條件不新增專屬錯誤碼 | 目前保守歸類為 `ODOO_RPC_ERROR`；實測後若有穩定 exception 名稱，再對應成 `NOT_FOUND` 並在訊息提示「模組未安裝」 |
+| 9 | `fields_get` 的 `attributes` 參數受支援 | ✅ 成立（`res.partner` 186 欄位，只回要求的 attribute）。放寬 byte 上限的回退在 18 上不觸發，但保留給 8–17 | **不是 no-op 回退**：改用最小 attribute 集 `fields_get([], ['type'])`；若連 `attributes` 都不支援，該次 `fields_get` 請求**單獨**把 byte 上限放寬到 `max(maxResponseBytes, 8 MB)`。原因：完整 `fields_get`（`account.move` / `res.partner`）輕易超過 1 MB 預設值，而欄位型別快取是所有工具的前置步驟——不放寬會讓**每個工具一起壞成 `RESPONSE_TOO_LARGE`** |
+| 10 | 建立 `project.task` 不指定 `stage_id` 時會落在第一個階段 | ✅ 成立（落在 `[1, "New"]`，seq 最小）。四語描述仍維持保守寫法「由 Odoo 套用預設階段」 | 若落在別處，改為先查該 project 的最小 sequence stage 再顯式帶入 |
+| 11 | `sale.order` 只給 `partner_id` 即可建立（pricelist/company 由 onchange 補上） | ✅ 成立（建立成功，回 `{id, name, state:'draft'}`） | 若 Odoo 丟 `UserError`（缺 pricelist），G2 已會把原因透出；必要時把 `pricelist_id` 加進 create 允許欄位 |
+| 12 | 各業務欄位的存在性與 selection 值域（本列為驗證後補記，原屬 §10.1 的非目標理由） | ✅ 全部符合（`sale.order.state` 含 `draft`；`project.task.state` 確實無 `draft`；`account.move.payment_state` 七個值；`customer_rank`/`supplier_rank` 存在） | 維持不做業務包裝工具、不做欄位存在性的靜默降級 |
+| 13 | **白名單 model 在目標 Odoo 上存在**（驗證時新發現，設計階段未列） | ❌ **不成立**：剛裝好的 Odoo 只有 `base` 系列 model；其餘 12 個需 `product`/`sale`/`purchase`/`account`/`project`/`crm`/`stock` 模組 | 不新增錯誤碼（判別依據只有會被翻譯的訊息文字）；改為在 `odoo_search_read` 與 `odoo_describe_model` 的四語描述與四語 README 明說，並引導先用 `odoo_describe_model` 確認 |
 
 ---
 

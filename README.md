@@ -7,15 +7,15 @@ It lets an agent inspect Odoo business data — contacts, quotations, sales orde
 project tasks, leads, stock — without changing Odoo state. One opt-in tool can create a
 strictly limited draft record, and it is not even registered unless you enable it.
 
-> ⚠️ **Not yet validated against a live Odoo server (as of 2026-08-27).** Every compatibility
-> assumption in this release is taken from the Odoo documentation and covered by mocked tests
-> only — not one has been confirmed against a real instance. The full list of assumptions, with
-> the fallback for each, is in [`docs/live-verification.md`](docs/live-verification.md).
-> The plugin speaks JSON-RPC only and needs `/jsonrpc` to be reachable (see
-> [Transport](#transport)). Verify it against your own instance before relying on it, and when
-> something breaks please report the Odoo version and serie, how it is deployed (Odoo Online,
-> Odoo.sh, self-hosted, container, and which reverse proxy sits in front), and the full output
-> of `odoo_server_info`.
+> ✅ **Verified against Odoo 18 on 2026-08-27** — the official `odoo:18` image reporting
+> `server_version` `18.0-20260817`. Most compatibility assumptions were checked on a live
+> server; the results, and what is **still unverified**, are in
+> [`docs/live-verification.md`](docs/live-verification.md): only Odoo 18 was tested (8–17 and 19
+> were not), and only a Docker image reached directly — behind a reverse proxy, Odoo Online and
+> Odoo.sh remain untested. The plugin speaks JSON-RPC only and needs `/jsonrpc` to be reachable
+> (see [Transport](#transport)). When something breaks, please report the Odoo version and
+> serie, how it is deployed (Odoo Online, Odoo.sh, self-hosted, container, and which reverse
+> proxy sits in front), and the full output of `odoo_server_info`.
 
 ## Tools
 
@@ -32,6 +32,26 @@ This plugin speaks **JSON-RPC 2.0** to `POST {baseUrl}/jsonrpc`, so your Odoo se
 that endpoint (it is provided by the `web` module). If the endpoint is missing, redirected, or
 intercepted by a proxy, every tool fails with a `TRANSPORT_UNSUPPORTED` error that says so.
 XML-RPC is not implemented.
+
+## Model availability
+
+The 14 allow-listed models are **not guaranteed to exist on every Odoo**. Only the `base` models
+are always present; the rest come from business modules a stock Odoo does not install.
+
+| Module | Allow-listed models | Installed by default |
+| --- | --- | --- |
+| `base` | `res.partner`, `res.users`, `res.company` | yes |
+| `product` | `product.product`, `product.template` | no |
+| `sale` / `sale_management` | `sale.order`, `sale.order.line` | no |
+| `purchase` | `purchase.order` | no |
+| `account` | `account.move`, `account.move.line` | no |
+| `project` | `project.project`, `project.task` | no |
+| `crm` | `crm.lead` | no |
+| `stock` | `stock.quant` | no |
+
+On a stock Odoo 18 with no business modules, querying `sale.order` fails with
+`ODOO_VALIDATION_ERROR` carrying the upstream reason `Object sale.order doesn't exist`. Call
+`odoo_describe_model` first to confirm a model is available on your instance.
 
 ## Requirements
 

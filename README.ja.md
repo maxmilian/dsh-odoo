@@ -8,14 +8,14 @@ DeepSeek Harness プラグインです。エージェントは Odoo の状態を
 明示的に有効化した場合のみ、厳しく制限されたドラフトレコードを作成するツールが 1 つ追加されます。
 無効のときはそのツール自体が登録されません。
 
-> ⚠️ **実際の Odoo サーバーでの検証は未実施です（2026-08-27 時点）。** 本リリースの互換性に関する
-> 前提はすべて Odoo の公式ドキュメントに基づくもので、モックテストのみでカバーされています。
-> 実インスタンスで確認できた前提は 1 つもありません。前提の一覧と各フォールバックは
-> [`docs/live-verification.md`](docs/live-verification.md) にあります。本プラグインは JSON-RPC
-> のみを使用し、`/jsonrpc` に到達できる必要があります（[トランスポート](#トランスポート)参照）。
-> 本番で依存する前にご自身のインスタンスで検証してください。問題が起きた場合は、Odoo の
-> バージョンと serie、デプロイ形態（Odoo Online、Odoo.sh、自己ホスト、コンテナ、前段の
-> リバースプロキシ）、および `odoo_server_info` の完全な出力を添えてご報告ください。
+> ✅ **2026-08-27 に Odoo 18 で live 検証を実施しました。** 公式 `odoo:18` イメージ
+> （`server_version` は `18.0-20260817`）です。互換性に関する前提の大半を実サーバーで確認しており、結果と
+> **未検証の範囲**は [`docs/live-verification.md`](docs/live-verification.md) にあります。
+> 検証したのは Odoo 18 のみ（8〜17 および 19 は未検証）、かつ直接接続した Docker イメージのみで、
+> リバースプロキシ配下・Odoo Online・Odoo.sh は未検証です。本プラグインは JSON-RPC のみを使用し、
+> `/jsonrpc` に到達できる必要があります（[トランスポート](#トランスポート)参照）。問題が起きた
+> 場合は、Odoo のバージョンと serie、デプロイ形態（Odoo Online、Odoo.sh、自己ホスト、コンテナ、
+> 前段のリバースプロキシ）、および `odoo_server_info` の完全な出力を添えてご報告ください。
 
 ## ツール
 
@@ -32,6 +32,27 @@ DeepSeek Harness プラグインです。エージェントは Odoo の状態を
 このエンドポイント（`web` モジュールが提供）を公開している必要があります。エンドポイントが
 存在しない、リダイレクトされる、プロキシに遮断される場合は、すべてのツールが
 `TRANSPORT_UNSUPPORTED` エラーでその旨を通知します。XML-RPC は実装していません。
+
+## model の利用可否
+
+許可リストにある 14 個の model は、**すべての Odoo に存在するとは限りません**。常に存在するのは
+`base` が提供する model だけで、残りは業務モジュールが提供し、初期状態の Odoo には
+インストールされていません。
+
+| モジュール | 許可リストの model | 既定でインストール |
+| --- | --- | --- |
+| `base` | `res.partner`、`res.users`、`res.company` | はい |
+| `product` | `product.product`、`product.template` | いいえ |
+| `sale` / `sale_management` | `sale.order`、`sale.order.line` | いいえ |
+| `purchase` | `purchase.order` | いいえ |
+| `account` | `account.move`、`account.move.line` | いいえ |
+| `project` | `project.project`、`project.task` | いいえ |
+| `crm` | `crm.lead` | いいえ |
+| `stock` | `stock.quant` | いいえ |
+
+業務モジュール未導入の Odoo 18 で `sale.order` を照会すると `ODOO_VALIDATION_ERROR` となり、
+上流の理由 `Object sale.order doesn't exist` が付きます。まず `odoo_describe_model` を呼び出し、
+その model がご自身のインスタンスで利用可能かを確認してください。
 
 ## 必要条件
 

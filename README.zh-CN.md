@@ -6,12 +6,13 @@
 它让 agent 能查看 Odoo 的业务数据——联系人、报价单、销售订单、发票、项目任务、商机、库存——
 而不会改动 Odoo 状态。另有一个需显式开启的工具可创建受严格限制的草稿记录；未开启时该工具根本不会注册。
 
-> ⚠️ **尚未对真实 Odoo 服务器做过 live 验证（截至 2026-08-27）。** 本版本的所有兼容性假设均取自
-> Odoo 官方文档，且仅由 mock 测试覆盖——没有任何一项在真实实例上被证实过。完整假设清单与各自的
-> 回退方案见 [`docs/live-verification.md`](docs/live-verification.md)。本插件只走 JSON-RPC，
-> 需要 `/jsonrpc` 可连接（见[传输方式](#传输方式)）。正式依赖前请先对你自己的实例进行验证；
-> 遇到问题回报时，请附上 Odoo 版本与 serie、部署方式（Odoo Online、Odoo.sh、自建、容器、
-> 前面挡着哪种反向代理），以及 `odoo_server_info` 的完整输出。
+> ✅ **已于 2026-08-27 对 Odoo 18 完成 live 验证**——官方 `odoo:18` image，`server_version`
+> 回报 `18.0-20260817`。多数兼容性假设都在真实服务器上实测过；结果与**仍未验证的范围**见
+> [`docs/live-verification.md`](docs/live-verification.md)：本次只验了 Odoo 18（8–17 与 19 未验），
+> 且只验了直连的 Docker image——反向代理后方、Odoo Online、Odoo.sh 均未验。本插件只走 JSON-RPC，
+> 需要 `/jsonrpc` 可连接（见[传输方式](#传输方式)）。遇到问题回报时，请附上 Odoo 版本与 serie、
+> 部署方式（Odoo Online、Odoo.sh、自建、容器、前面挡着哪种反向代理），
+> 以及 `odoo_server_info` 的完整输出。
 
 ## 工具
 
@@ -27,6 +28,26 @@
 本插件以 **JSON-RPC 2.0** 调用 `POST {baseUrl}/jsonrpc`，因此你的 Odoo 必须开放该端点
 （由 `web` 模块提供）。若端点不存在、被重定向或被 proxy 拦截，所有工具都会以
 `TRANSPORT_UNSUPPORTED` 错误明确告知。本版本未实现 XML-RPC。
+
+## Model 可用性
+
+白名单的 14 个 model **不保证在所有 Odoo 部署上都存在**。只有 `base` 提供的 model 一定在；
+其余由业务模块提供，而刚装好的 Odoo 并不会安装那些模块。
+
+| 模块 | 白名单 model | 默认安装 |
+| --- | --- | --- |
+| `base` | `res.partner`、`res.users`、`res.company` | 是 |
+| `product` | `product.product`、`product.template` | 否 |
+| `sale` / `sale_management` | `sale.order`、`sale.order.line` | 否 |
+| `purchase` | `purchase.order` | 否 |
+| `account` | `account.move`、`account.move.line` | 否 |
+| `project` | `project.project`、`project.task` | 否 |
+| `crm` | `crm.lead` | 否 |
+| `stock` | `stock.quant` | 否 |
+
+在未安装业务模块的 Odoo 18 上查询 `sale.order` 会失败，返回 `ODOO_VALIDATION_ERROR`，
+并带上游原因 `Object sale.order doesn't exist`。请先调用 `odoo_describe_model`
+确认该 model 在你的实例上可用。
 
 ## 需求
 
