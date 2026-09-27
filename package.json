@@ -1,6 +1,6 @@
 {
   "name": "dsh-odoo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read-only Odoo tools for DeepSeek Harness, with an opt-in restricted draft-create tool.",
   "homepage": "https://github.com/maxmilian/dsh-odoo#readme",
   "bugs": {
